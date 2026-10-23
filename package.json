@@ -1,0 +1,8 @@
+{
+  "name": "walkie-relay",
+  "version": "1.0.0",
+  "description": "Push-to-listen walkie-talkie relay/signaling server",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "ws": "^8.18.0" }
+}
