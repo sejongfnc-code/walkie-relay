@@ -32,7 +32,48 @@ function sendSources(r) {
   }
 }
 
+// ---- Error reports (POST /report, GET /reports?key=...) ----
+const fs = require('fs');
+const path = require('path');
+const REPORT_KEY = process.env.REPORT_KEY || 'A1tiDmozBZnNhM846ZrzzYnfcyVn9tPU';
+const REPORT_FILE = process.env.REPORT_FILE || path.join(__dirname, 'reports.jsonl');
+const reports = [];
+try {
+  if (fs.existsSync(REPORT_FILE)) {
+    for (const l of fs.readFileSync(REPORT_FILE, 'utf8').split('\n').slice(-200)) {
+      if (l.trim()) try { reports.push(JSON.parse(l)); } catch {}
+    }
+  }
+} catch {}
+
+function json(res, code, obj) {
+  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(obj));
+}
+
 const server = http.createServer((req, res) => {
+  const url = new URL(req.url, 'http://x');
+  if (req.method === 'POST' && url.pathname === '/report') {
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 200000) req.destroy(); });
+    req.on('end', () => {
+      let o;
+      try { o = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: 'bad json' }); }
+      if (o.key !== REPORT_KEY) return json(res, 403, { ok: false });
+      delete o.key;
+      o.receivedAt = new Date().toISOString();
+      reports.push(o);
+      while (reports.length > 200) reports.shift();
+      try { fs.appendFileSync(REPORT_FILE, JSON.stringify(o) + '\n'); } catch {}
+      console.log(`[report] ${o.device} ${o.role} ${o.kind}: ${String(o.text).slice(0, 120)}`);
+      json(res, 200, { ok: true });
+    });
+    return;
+  }
+  if (req.method === 'GET' && url.pathname === '/reports') {
+    if (url.searchParams.get('key') !== REPORT_KEY) return json(res, 403, { ok: false });
+    return json(res, 200, { ok: true, count: reports.length, reports });
+  }
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('walkie relay ok\n');
 });
